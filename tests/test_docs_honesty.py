@@ -63,3 +63,16 @@ def test_no_typographic_dash_in_authored_python() -> None:
             continue
         text = path.read_text(encoding="utf-8")
         assert not pattern.search(text), f"typographic dash in {path}"
+
+
+def test_spdx_headers_on_authored_sources() -> None:
+    import subprocess
+
+    files = subprocess.check_output(["git", "ls-files"], cwd=REPO, text=True).split()
+    exts = (".py", ".ts", ".html", ".css", ".toml", ".in", ".yml")
+    missing = [
+        f
+        for f in files
+        if f.endswith(exts) and "SPDX-License-Identifier: Apache-2.0" not in (REPO / f).read_text(encoding="utf-8")
+    ]
+    assert missing == []

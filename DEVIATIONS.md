@@ -10,6 +10,8 @@ Date: 2026-11-11. Weight and training seed `20261111`. Fixtures: committed `trai
 - **New gate:** `dagger_ood_successes >= bc_ood_successes`, `dagger_ood_collisions <= bc_ood_collisions`, and `dagger_id_successes >= bc_id_successes`.
 - **Not demonstrated:** with only 8 OOD episodes per suite, a DAgger advantage over BC out of distribution is not demonstrated.
 
+**Vacuity on the locked run.** Collisions are counted once per episode. With BC OOD at 0/8 successes and 8/8 collisions, `dagger_ood_successes >= 0` and `dagger_ood_collisions <= 8` cannot fail for any 8-episode DAgger result, so the two OOD clauses are reported but are not a real check here. The only binding amended DAgger clause on this run is in distribution: DAgger 4/8 >= BC 3/8. The report records this in `dagger_gate_audit` (which clauses can fail, the id clause, and that the retired 0.25 margin was missed); `nil report --check` recomputes that field from the episode records, and the dashboard shows it. No stricter OOD clause was added, because any threshold chosen now would be picked after seeing the locked result.
+
 Locked suites, train-selected DAgger checkpoint (round 3 of 4, 13/20 train successes):
 
 | Suite | Successes | Collisions | Timeouts |
@@ -59,3 +61,7 @@ PLAN.md said the report holds "64 plus mutants' 16" episode records. Eight suite
 ## 5. Playwright system packages in CI
 
 PLAN.md Decision J says `npx playwright install --with-deps chromium`. On 2026-11-11 three consecutive web jobs failed inside that command because the runner could not resolve its apt mirror (font packages only), before any test ran. The web job now downloads Chromium with `npx playwright install chromium` and runs `npx playwright install-deps chromium` as a best-effort step with a 240 s limit, then runs the same Playwright tests. No test was changed.
+
+## 6. Report field `dagger_gate_audit`
+
+Schema v1 gains one additive top-level field, `dagger_gate_audit`, recomputed from episode records by `nil eval` and checked by `nil report --check`. It says which amended DAgger clauses can fail on the run, gives the in-distribution clause, and records whether the retired 0.25 OOD margin was met. It is not a ship gate and does not change any existing gate or test.

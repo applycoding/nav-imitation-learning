@@ -40,7 +40,10 @@ def test_dagger_no_regression(report_json: dict[str, Any]) -> None:
     The original margin (DAgger OOD rate >= BC OOD rate + 0.25) was not met on the
     locked ood_test maps. The amended gate asks only for no regression against BC:
     OOD successes not lower, OOD collisions not higher, id successes not lower.
-    It does not show a DAgger advantage out of distribution.
+    It does not show a DAgger advantage out of distribution. When BC OOD is at
+    0 successes and n collisions (the locked run), the two OOD asserts cannot
+    fail and only the in-distribution assert binds; `dagger_gate_audit` in the
+    report records this.
     """
     bc_id = _agg(_episodes_for(report_json, "bc_id"))
     bc_ood = _agg(_episodes_for(report_json, "bc_ood"))

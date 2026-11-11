@@ -13,6 +13,7 @@ from nav_imitation_learning.eval.report import (
     SUITE_NAMES,
     _finalize_suite,
     check_report,
+    dagger_gate_audit,
     write_report,
 )
 
@@ -108,3 +109,45 @@ def test_coverage_fail_under_raises() -> None:
         text=True,
     )
     assert proc.returncode != 0
+
+
+def _ep(suite: str, status: str, collision: bool) -> dict:
+    return {"suite": suite, "status": status, "collision": collision, "time_s": 1.0}
+
+
+def _audit_eps(bc_ood: list[tuple[str, bool]]) -> list[dict]:
+    eps = [_ep("bc_id", "success", False)] * 3 + [_ep("bc_id", "collision", True)] * 5
+    eps += [_ep("dagger_id", "success", False)] * 4 + [_ep("dagger_id", "collision", True)] * 4
+    eps += [_ep("bc_ood", s, c) for s, c in bc_ood]
+    eps += [_ep("dagger_ood", "collision", True)] * 8
+    return eps
+
+
+def test_gate_audit_at_bc_floor_marks_ood_clauses_vacuous() -> None:
+    audit = dagger_gate_audit(_audit_eps([("collision", True)] * 8))
+    assert audit["ood_successes_clause_can_fail"] is False
+    assert audit["ood_collisions_clause_can_fail"] is False
+    assert audit["binding_clauses"] == ["dagger_id_successes >= bc_id_successes"]
+    assert audit["id_clause"] == "4/8 >= 3/8"
+    assert audit["original_margin_met"] is False
+
+
+def test_gate_audit_off_floor_marks_ood_clauses_binding() -> None:
+    audit = dagger_gate_audit(_audit_eps([("success", False)] + [("collision", True)] * 7))
+    assert audit["ood_successes_clause_can_fail"] is True
+    assert audit["ood_collisions_clause_can_fail"] is True
+    assert len(audit["binding_clauses"]) == 3
+
+
+def test_report_gate_audit_matches_records(report_json: dict) -> None:
+    assert report_json["dagger_gate_audit"] == dagger_gate_audit(report_json["episodes"])
+
+
+def test_tampered_gate_audit_rejected(report_json: dict, tmp_path: Path) -> None:
+    bad = copy.deepcopy(report_json)
+    bad["dagger_gate_audit"]["ood_successes_clause_can_fail"] = not bad["dagger_gate_audit"][
+        "ood_successes_clause_can_fail"
+    ]
+    path = tmp_path / "bad_audit.json"
+    write_report(path, bad)
+    assert check_report(path, require_ci=False, expect_sha=None) == 1

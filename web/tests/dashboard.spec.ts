@@ -30,6 +30,9 @@ test.describe("dashboard", () => {
       episodes: { suite: string; seed: number; status: string }[];
     };
     await expect(page.locator("#run-info")).toContainText(report.git_sha);
+    const audit = (report as unknown as { dagger_gate_audit: { id_clause: string } }).dagger_gate_audit;
+    await expect(page.locator("#gate-audit")).toContainText(audit.id_clause);
+    await expect(page.locator("#gate-audit")).toContainText(/Gate audit:/);
     for (const [name, s] of Object.entries(report.suites)) {
       const cells = page.locator(`tr[data-suite="${name}"] td`);
       await expect(cells).toHaveText([

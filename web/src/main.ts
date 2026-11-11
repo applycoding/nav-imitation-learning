@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 import { drawScene } from "./draw.ts";
-import { isReportV1, SUITE_ORDER, type ReportV1, type Trajectory } from "./schema.ts";
+import { gateAuditText, isReportV1, SUITE_ORDER, type ReportV1, type Trajectory } from "./schema.ts";
 
 const HONESTY_LINES = [
   "Simulation only",
@@ -14,6 +14,7 @@ const statusEl = document.querySelector<HTMLElement>("#status");
 const sampleNote = document.querySelector<HTMLElement>("#sample-note");
 const table = document.querySelector<HTMLTableElement>("#suites");
 const runInfo = document.querySelector<HTMLElement>("#run-info");
+const gateAudit = document.querySelector<HTMLElement>("#gate-audit");
 const select = document.querySelector<HTMLSelectElement>("#episode-select");
 const canvas = document.querySelector<HTMLCanvasElement>("#map");
 const ctx = canvas?.getContext("2d");
@@ -111,6 +112,9 @@ async function boot(): Promise<void> {
         sampleNote.hidden = false;
         sampleNote.textContent = "Sample report (not a CI run)";
       }
+    }
+    if (gateAudit) {
+      gateAudit.textContent = gateAuditText(report);
     }
     if (runInfo) {
       runInfo.textContent = `git_sha ${report.git_sha}, DAgger checkpoint round ${report.dagger_selected_round} (selected on train maps)`;

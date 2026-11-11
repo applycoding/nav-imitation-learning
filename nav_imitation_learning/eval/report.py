@@ -87,9 +87,43 @@ def build_report(
             "plan_inflation_m": PLAN_INFLATION_M,
         },
         "open_loop_mse": open_loop_mse,
+        "dagger_gate_audit": dagger_gate_audit(episodes),
         "suites": suites,
         "episodes": episodes,
         "trajectories": trajectories,
+    }
+
+
+def dagger_gate_audit(episodes: list[dict[str, Any]]) -> dict[str, Any]:
+    """Say which amended DAgger clauses can actually fail on this run (PLAN.md Amendment 1).
+
+    Collisions are counted once per episode, so with n OOD episodes BC OOD
+    successes are at least 0 and collisions at most n. If BC OOD has 0 successes
+    and n collisions, the two OOD no-regression clauses hold for any DAgger
+    result and only the in-distribution clause binds. The retired 0.25 margin
+    is recomputed and recorded; it is not a ship gate.
+    """
+    bc_id = _recompute_agg([e for e in episodes if e.get("suite") == "bc_id"])
+    bc_ood = _recompute_agg([e for e in episodes if e.get("suite") == "bc_ood"])
+    dag_id = _recompute_agg([e for e in episodes if e.get("suite") == "dagger_id"])
+    dag_ood = _recompute_agg([e for e in episodes if e.get("suite") == "dagger_ood"])
+    n_ood = bc_ood["n"]
+    succ_clause_can_fail = bool(bc_ood["successes"] > 0)
+    coll_clause_can_fail = bool(bc_ood["collisions"] < n_ood)
+    binding = ["dagger_id_successes >= bc_id_successes"]
+    if succ_clause_can_fail:
+        binding.append("dagger_ood_successes >= bc_ood_successes")
+    if coll_clause_can_fail:
+        binding.append("dagger_ood_collisions <= bc_ood_collisions")
+    rate_bc_ood = bc_ood["successes"] / n_ood if n_ood else 0.0
+    rate_dag_ood = dag_ood["successes"] / dag_ood["n"] if dag_ood["n"] else 0.0
+    return {
+        "ood_successes_clause_can_fail": succ_clause_can_fail,
+        "ood_collisions_clause_can_fail": coll_clause_can_fail,
+        "binding_clauses": binding,
+        "id_clause": f"{dag_id['successes']}/{dag_id['n']} >= {bc_id['successes']}/{bc_id['n']}",
+        "original_margin_met": bool(rate_dag_ood >= rate_bc_ood + 0.25),
+        "original_margin_rule": "dagger_ood_rate >= bc_ood_rate + 0.25 (retired, not a ship gate)",
     }
 
 
@@ -208,6 +242,9 @@ def check_report(path: Path, *, require_ci: bool, expect_sha: str | None) -> int
         if not finalized["pass"]:
             print(f"gate failed: {name}", file=sys.stderr)
             return 1
+    if data.get("dagger_gate_audit") != dagger_gate_audit(eps):
+        print("dagger_gate_audit disagrees with episode records", file=sys.stderr)
+        return 1
     return 0
 
 

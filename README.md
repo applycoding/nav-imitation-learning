@@ -20,6 +20,13 @@ policy-visited states. Closed-loop evaluation on held-out maps checks covariate
 shift; open-loop MSE on frozen expert states is a regression check only, not a
 substitute for closed-loop success.
 
+This is an original NumPy implementation of behavior cloning and DAgger-style
+dataset aggregation, inspired by Ross, Gordon and Bagnell, "A Reduction of
+Imitation Learning and Structured Prediction to No-Regret Online Learning",
+AISTATS 2011 (listed in REFERENCES.md). It is not the authors' code, not an
+implementation of Nav2, and not a reproduction of a specific published training
+run, and it makes no no-regret claim.
+
 The tracker is inspired by path-tracking ideas but is **not** Coulter's curvature
 law and is **not** a Nav2 controller.
 
@@ -50,7 +57,7 @@ Install: `pip install --require-hashes -r requirements.lock` then `pip install
 | Expert | 20/20 train, 8/8 id_test, 8/8 ood_test; zero collisions and invalid |
 | BC id | Closed-loop successes >= 2 on id_test |
 | BC ood | `bc_ood_rate <= bc_id_rate - 0.25` |
-| DAgger | Train-selected checkpoint: `dagger_id >= bc_id`, `dagger_ood >= bc_ood`, and DAgger OOD collisions `<=` BC OOD collisions (amended; see below) |
+| DAgger | Train-selected checkpoint: `dagger_id >= bc_id`, `dagger_ood >= bc_ood`, and DAgger OOD collisions `<=` BC OOD collisions (amended; on this run only the id clause can fail, see below) |
 | Shuffle mutant | 8 finite id episodes; successes <= 1 and < BC id |
 | Zero policy | 8 finite episodes; 0 successes; max displacement <= 1e-9 m |
 
@@ -67,6 +74,12 @@ What this shows, plainly:
 - In distribution, DAgger reached 4/8 against 3/8 for BC on id_test (6/8 against 2/8 on the dev maps), still well below the 8/8 planner baseline.
 - Out of distribution, both learned policies mostly collide. DAgger 1/8 against BC 0/8 is one map, and with only 8 OOD episodes a DAgger advantage over BC out of distribution is **not demonstrated**.
 - The plan originally required DAgger to beat BC on ood_test by 2 maps. That gate was missed and was amended to a no-regression gate after training changes tried on dev maps did not help. The counts and every variant tried are in `DEVIATIONS.md` and PLAN.md Amendment 1.
+- **The amended OOD clauses cannot fail on this run.** Collisions count once per
+  episode, and BC fails all 8 OOD maps with 8 collisions. So "DAgger OOD successes
+  >= 0" and "DAgger OOD collisions <= 8" hold for any possible DAgger result. They
+  are reported, but the only binding DAgger clause here is in distribution:
+  DAgger 4/8 >= BC 3/8. The report's `dagger_gate_audit` field and the dashboard
+  state this, and also record that the original 0.25 margin was missed.
 - Both mutants (shuffled labels, zero commands) run 8 healthy episodes and fail their gates as intended (0/8 each).
 
 Recorded CI output for a passing main-branch run is shown on GitHub Pages at
