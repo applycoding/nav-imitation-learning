@@ -55,3 +55,7 @@ Stateless `label(...)` uses the episode polyline from `world.start`, `project_ar
 ## 4. Episode-record count
 
 PLAN.md said the report holds "64 plus mutants' 16" episode records. Eight suites times 8 seeds is 64 including the two mutant suites, which is what the report writes. The schema test now requires exactly 64 records and exactly 8 per suite, and PLAN.md is corrected.
+
+## 5. Playwright system packages in CI
+
+PLAN.md Decision J says `npx playwright install --with-deps chromium`. On 2026-11-11 three consecutive web jobs failed inside that command because the runner could not resolve its apt mirror (font packages only), before any test ran. The web job now downloads Chromium with `npx playwright install chromium` and runs `npx playwright install-deps chromium` as a best-effort step with a 240 s limit, then runs the same Playwright tests. No test was changed.

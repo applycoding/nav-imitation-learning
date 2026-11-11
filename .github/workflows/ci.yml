@@ -239,7 +239,10 @@ jobs:
 
       - name: Playwright
         run: |
-          npx playwright install --with-deps chromium
+          # Browser download first; OS packages are best effort with a time limit,
+          # because a runner apt mirror outage must not block the e2e tests.
+          npx playwright install chromium
+          timeout 240 npx playwright install-deps chromium || echo "playwright install-deps did not finish; using preinstalled runner libraries"
           npx playwright test
 
       - name: Upload web-dist
