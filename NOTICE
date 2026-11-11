@@ -1,0 +1,13 @@
+nav-imitation-learning, Copyright 2026 Arpan Bom
+
+This product is licensed under the Apache License, Version 2.0.
+See the LICENSE file and the SPDX-License-Identifier headers on authored sources.
+
+Third-party components that are actually redistributed or installed for
+development will be listed here with version and license when the lockfiles
+land. Idea-only citations belong in REFERENCES.md and are not redistributed
+source.
+
+Honesty boundary: this is a simulation on synthetic maps with a scripted
+expert. It is not a production driving policy, not a foundation model, not
+Nav2, and not on-robot data collection.
