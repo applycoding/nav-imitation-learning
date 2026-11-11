@@ -1,0 +1,280 @@
+# SPDX-License-Identifier: Apache-2.0
+name: ci
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  core:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+
+      - name: Setup Python 3.12
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0
+        with:
+          python-version: "3.12"
+
+      - name: Thread and hash determinism
+        run: |
+          echo "OMP_NUM_THREADS=1" >> "$GITHUB_ENV"
+          echo "OPENBLAS_NUM_THREADS=1" >> "$GITHUB_ENV"
+          echo "MKL_NUM_THREADS=1" >> "$GITHUB_ENV"
+          echo "NUMEXPR_NUM_THREADS=1" >> "$GITHUB_ENV"
+          echo "PYTHONHASHSEED=0" >> "$GITHUB_ENV"
+
+      - name: Safe directory for git SHA
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+
+      - name: Install Python deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install --require-hashes -r requirements.lock
+          pip install --no-deps -e .
+
+      - name: Generate and diff fixtures
+        id: fixtures
+        run: |
+          TMPGEN=$(mktemp -d)
+          nil generate --out "$TMPGEN"
+          python <<PY
+          import json
+          from pathlib import Path
+          import numpy as np
+          from nav_imitation_learning.env.maps import occupancy_sha256
+
+          families = ("train", "id_test", "ood_test")
+          repo = Path("fixtures")
+          tmp = Path("$TMPGEN")
+          errs = []
+          for fam in families:
+              for child in sorted((repo / fam).iterdir()):
+                  if not child.is_dir():
+                      continue
+                  seed = child.name
+                  other = tmp / fam / seed
+                  oc1 = np.load(child / "occupancy.npy")
+                  oc2 = np.load(other / "occupancy.npy")
+                  if occupancy_sha256(oc1) != occupancy_sha256(oc2):
+                      errs.append(f"sha256 mismatch {fam}/{seed}")
+                  m1 = json.loads((child / "meta.json").read_text())
+                  m2 = json.loads((other / "meta.json").read_text())
+                  if m1["boxes"] != m2["boxes"]:
+                      errs.append(f"boxes mismatch {fam}/{seed}")
+                  if m1["start_xytheta"] != m2["start_xytheta"]:
+                      errs.append(f"start mismatch {fam}/{seed}")
+                  if m1["goal_xy"] != m2["goal_xy"]:
+                      errs.append(f"goal mismatch {fam}/{seed}")
+          if errs:
+              print("\n".join(errs))
+              raise SystemExit(1)
+          print("fixture diff ok")
+          PY
+
+      - name: Ruff
+        run: ruff check .
+
+      - name: Mypy
+        run: mypy --strict nav_imitation_learning
+
+      - name: Train and eval
+        run: |
+          mkdir -p artifacts
+          nil train-bc --fixtures fixtures/ --init-out artifacts/init.npz --out artifacts/bc.npz
+          nil train-dagger --fixtures fixtures/ --init artifacts/init.npz --bc artifacts/bc.npz --out artifacts/dagger.npz
+          nil eval --fixtures fixtures/ --bc artifacts/bc.npz --dagger artifacts/dagger.npz --out artifacts/report.json --git-sha "${{ github.sha }}"
+
+      - name: Report check
+        run: nil report --check artifacts/report.json --require-ci --expect-sha "${{ github.sha }}"
+
+      - name: Pytest with coverage
+        run: |
+          pytest tests/ \
+            --ignore=tests/cov_uncovered_stub \
+            --cov=nav_imitation_learning.env \
+            --cov=nav_imitation_learning.expert \
+            --cov=nav_imitation_learning.policy \
+            --cov=nav_imitation_learning.train \
+            --cov=nav_imitation_learning.eval \
+            --cov-report=term-missing \
+            --cov-fail-under=80
+
+      - name: Author check
+        env:
+          CHECK_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          git fetch --no-tags --depth=1 origin "$CHECK_SHA" || true
+          python <<'PY'
+          import os
+          import subprocess
+          import sys
+
+          sha = os.environ["CHECK_SHA"]
+          out = subprocess.check_output(["git", "show", "-s", "--format=%an <%ae>%n%cn <%ce>%n%B", sha], text=True)
+          lines = out.splitlines()
+          author, committer = lines[0], lines[1]
+          body = "\n".join(lines[2:])
+          expected = "Arpan Bom <applycoding@gmail.com>"
+          if author != expected or committer != expected:
+              print(f"author/committer mismatch:\n{out}")
+              sys.exit(1)
+          if "Co-authored-by:" in body:
+              print("co-author trailer found")
+              sys.exit(1)
+          print("author check ok")
+          PY
+
+      - name: License bytes
+        run: |
+          python <<'PY'
+          import hashlib
+          from pathlib import Path
+
+          data = Path("LICENSE").read_bytes()
+          if len(data) != 11358:
+              raise SystemExit(f"LICENSE length {len(data)} != 11358")
+          h = hashlib.sha256(data).hexdigest()
+          want = "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+          if h != want:
+              raise SystemExit(f"LICENSE sha256 mismatch {h}")
+          print("license-bytes ok")
+          PY
+
+      - name: Typographic dash check
+        run: |
+          python <<'PY'
+          from pathlib import Path
+
+          bad = []
+          skip_dirs = {"node_modules", ".git", ".venv", "dist", "__pycache__"}
+          skip_files = {"requirements.lock", "package-lock.json"}
+          for path in Path(".").rglob("*"):
+              if not path.is_file():
+                  continue
+              if any(p in skip_dirs for p in path.parts):
+                  continue
+              if path.name in skip_files or path.suffix in {".npy", ".png", ".npz"}:
+                  continue
+              if path.suffix not in {".py", ".md", ".yml", ".yaml", ".ts", ".tsx", ".html", ".json", ".toml"}:
+                  continue
+              try:
+                  text = path.read_text(encoding="utf-8")
+              except UnicodeDecodeError:
+                  continue
+              for ch in ("\u2013", "\u2014", "\u2212"):
+                  if ch in text:
+                      bad.append((path, ch))
+          if bad:
+              for p, ch in bad:
+                  print(f"typographic dash U+{ord(ch):04X} in {p}")
+              raise SystemExit(1)
+          print("dash check ok")
+          PY
+
+      - name: Upload report artifact
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: report
+          path: artifacts/report.json
+
+      - name: Upload models artifact
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: models
+          path: |
+            artifacts/init.npz
+            artifacts/bc.npz
+            artifacts/dagger.npz
+
+  web:
+    needs: [core]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+
+      - name: Setup Node 26.13.0
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1
+        with:
+          node-version: "26.13.0"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      - name: Typecheck
+        run: npx tsc --noEmit
+
+      - name: Vitest
+        run: npx vitest run
+
+      - name: Download report
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with:
+          name: report
+          path: web/report_dl
+
+      - name: Copy CI report
+        run: |
+          test -f report_dl/report.json
+          cp report_dl/report.json public/report.json
+
+      - name: Build site
+        run: npx vite build --base /nav-imitation-learning/
+
+      - name: Playwright
+        run: |
+          npx playwright install --with-deps chromium
+          npx playwright test
+
+      - name: Upload web-dist
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: web-dist
+          path: web/dist
+
+  pages:
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    needs: [core, web]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - name: Download web-dist
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333
+        with:
+          name: web-dist
+          path: site
+
+      - name: Configure Pages
+        uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9
+        with:
+          path: site
+
+      - name: Deploy Pages
+        id: deploy
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346

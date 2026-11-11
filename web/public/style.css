@@ -1,0 +1,40 @@
+body {
+  font-family: system-ui, sans-serif;
+  margin: 1.5rem;
+  color: #1a202c;
+}
+
+.honesty {
+  max-width: 40rem;
+}
+
+.status {
+  color: #c53030;
+  font-weight: 600;
+}
+
+.sample-note {
+  font-style: italic;
+}
+
+table {
+  border-collapse: collapse;
+  margin: 1rem 0;
+}
+
+th,
+td {
+  border: 1px solid #cbd5e0;
+  padding: 0.35rem 0.6rem;
+}
+
+#map {
+  border: 1px solid #a0aec0;
+  display: block;
+  margin: 1rem 0;
+}
+
+.run-info {
+  font-family: ui-monospace, monospace;
+  font-size: 0.85rem;
+}

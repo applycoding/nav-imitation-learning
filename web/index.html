@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>nav-imitation-learning dashboard (simulation only)</title>
+    <link rel="stylesheet" href="/style.css" />
+  </head>
+  <body>
+    <div id="app">
+      <header>
+        <h1>nav-imitation-learning</h1>
+        <p id="banner" class="honesty"></p>
+        <p id="result-note" class="honesty">
+          With 8 out-of-distribution maps per suite, this run does not demonstrate a DAgger
+          advantage over behavior cloning out of distribution. See DEVIATIONS.md in the repository.
+        </p>
+        <p id="run-info" class="run-info"></p>
+      </header>
+      <main>
+        <section id="status" class="status" hidden></section>
+        <section id="sample-note" class="sample-note" hidden></section>
+        <canvas id="map" width="480" height="480"></canvas>
+        <table id="suites" aria-label="suite metrics"></table>
+        <label>
+          Episode
+          <select id="episode-select"></select>
+        </label>
+      </main>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

@@ -1,0 +1,35 @@
+[build-system]
+requires = ["hatchling==1.33.0"]
+build-backend = "hatchling.build"
+
+[project]
+name = "nav-imitation-learning"
+version = "1.0.0"
+description = "Simulation lab for planar navigation imitation learning"
+readme = "README.md"
+license = "Apache-2.0"
+requires-python = ">=3.12"
+authors = [{ name = "Arpan Bom", email = "applycoding@gmail.com" }]
+dependencies = ["numpy==2.5.4"]
+
+[project.scripts]
+nil = "nav_imitation_learning.cli:main"
+
+[tool.hatch.build.targets.wheel]
+packages = ["nav_imitation_learning"]
+
+[tool.ruff]
+target-version = "py312"
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W", "UP", "B"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+warn_return_any = true
+warn_unused_configs = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
